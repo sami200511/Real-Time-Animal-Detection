@@ -109,7 +109,7 @@ pip install ultralytics opencv-python pillow imagehash torch pyyaml numpy
 ## ▶️ How to Run
 
 ```bash
-python main.py
+python animal_trainer.py
 ```
 
 **The application will:**
