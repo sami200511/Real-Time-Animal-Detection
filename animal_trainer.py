@@ -2,7 +2,7 @@ import os
 import json
 import threading
 import time
-import shutil # مسؤولة عن حذف المجلدات
+import shutil # Responsible for deleting folders
 from pathlib import Path
 from flask import Flask, render_template, Response, request, jsonify
 

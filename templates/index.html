@@ -8,7 +8,7 @@
     <style>
         body { background-color: #0f172a; color: #f8fafc; }
         .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid #334155; }
-        /* أنميشن الساعة الرملية */
+        /* Hourglass Animation */
         @keyframes flipHourglass {
             0% { transform: rotate(0deg); }
             50% { transform: rotate(180deg); }
@@ -26,7 +26,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4h16v4l-6 6v4l6 6v4H4v-4l6-6v-4l-6-6V4z" />
         </svg>
         <h2 class="text-2xl font-bold text-emerald-400 animate-pulse">Processing... Please Wait</h2>
-        <p class="text-slate-400 mt-3 text-sm">جاري المعالجة، الرجاء عدم إغلاق الصفحة أو تحديثها...</p>
+        <p class="text-slate-400 mt-3 text-sm">Processing in progress, please do not close or refresh the page...</p>
     </div>
 
     <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -96,7 +96,7 @@
     </div>
 
     <script>
-        // دوال شاشة التحميل
+        // Loading screen functions
         function showLoading() { document.getElementById('loadingOverlay').classList.remove('hidden'); }
         function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
 
@@ -128,13 +128,13 @@
             const formData = new FormData();
             formData.append('file', file);
             
-            showLoading(); // تشغيل شاشة التحميل
+            showLoading(); // Turn on loading screen
             try {
                 const res = await fetch('/upload_image', { method: 'POST', body: formData });
                 const data = await res.json();
                 document.getElementById('uploadResult').innerText = data.message;
             } finally {
-                hideLoading(); // إخفاء الشاشة دائماً
+                hideLoading(); // Hide screen always
             }
         };
 
@@ -152,28 +152,28 @@
                 formData.append('files', files[i]);
             }
 
-            showLoading(); // تشغيل شاشة التحميل والمقاطعة
+            showLoading(); // Turn on loading screen
             
             try {
                 const res = await fetch('/upload_folder', { method: 'POST', body: formData });
                 const data = await res.json();
                 document.getElementById('folderResult').innerText = data.message;
                 
-                // سؤال المستخدم إذا كان يريد التدريب الآن
+                // Ask user if they want to train now
                 setTimeout(() => {
-                    if(confirm(`تمت معالجة المجلد (${folderName}) بنجاح.\n\nهل تريد البدء بتدريب الموديل الآن على هذه البيانات الجديدة؟`)) {
+                    if(confirm(`Folder (${folderName}) processed successfully.\n\nDo you want to start training the model now on this new data?`)) {
                         triggerTraining();
                     }
                 }, 500);
 
             } catch(err) {
-                alert("حدث خطأ أثناء رفع المجلد.");
+                alert("An error occurred while uploading the folder.");
             } finally {
-                hideLoading(); // إغلاق الشاشة
+                hideLoading(); // Close screen
             }
         };
 
-        // دالة تفعيل التدريب
+        // Training trigger function
         async function triggerTraining() {
             const res = await fetch('/start_training', { method: 'POST' });
             const data = await res.json();
@@ -181,9 +181,9 @@
             updateStatus();
         }
 
-        // دالة حذف البيانات
+        // Delete data function
         async function deleteAnimal(animal) {
-            if(!confirm(`تحذير: هل أنت متأكد أنك تريد حذف جميع صور وبيانات تدريب الحيوان: ${animal}؟\nلا يمكن التراجع عن هذا الإجراء.`)) return;
+            if(!confirm(`Warning: Are you sure you want to delete all images and training data for the animal: ${animal}?\nThis action cannot be undone.`)) return;
             
             showLoading();
             try {
@@ -221,7 +221,7 @@
                 const statsList = document.getElementById('statsList');
                 statsList.innerHTML = '';
                 if(Object.keys(data.stats).length === 0) {
-                    statsList.innerHTML = '<li class="py-2 text-slate-500">لا يوجد بيانات حتى الآن.</li>';
+                    statsList.innerHTML = '<li class="py-2 text-slate-500">No data available yet.</li>';
                 } else {
                     for (const [animal, count] of Object.entries(data.stats)) {
                         statsList.innerHTML += `
