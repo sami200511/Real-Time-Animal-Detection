@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOLO Animal Detector</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; }
+        .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid #334155; }
+    </style>
+</head>
+<body class="min-h-screen p-6 font-sans">
+
+    <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
+        
+        <div class="md:col-span-2 space-y-6">
+            <div class="glass-panel p-6 rounded-2xl shadow-xl">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-2xl font-bold text-emerald-400">Live Camera Feed</h2>
+                    <span class="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-sm animate-pulse">Live Tracking</span>
+                </div>
+                <div class="rounded-xl overflow-hidden border-2 border-slate-700 bg-black aspect-video flex justify-center items-center relative">
+                    <img src="{{ url_for('video_feed') }}" alt="Live Feed" class="w-full h-full object-cover">
+                </div>
+            </div>
+
+            <div class="glass-panel p-6 rounded-2xl shadow-xl">
+                <h3 class="text-xl font-bold mb-4 text-blue-400">Process Static Image</h3>
+                <form id="uploadForm" class="flex gap-4 items-center">
+                    <input type="file" id="imageInput" accept="image/*" class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600 cursor-pointer">
+                    <button type="submit" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-full font-bold transition-all shadow-lg shadow-blue-500/30">Process</button>
+                </form>
+                <p id="uploadResult" class="mt-3 text-sm text-slate-400"></p>
+            </div>
+        </div>
+
+        <div class="space-y-6">
+            
+            <div class="glass-panel p-6 rounded-2xl shadow-xl">
+                <h3 class="text-xl font-bold mb-4 text-purple-400">Model Auto-Trainer</h3>
+                <p class="text-sm text-slate-400 mb-4">The system collects distinct crops automatically. Train the model when you have enough data.</p>
+                
+                <div class="p-4 bg-slate-800 rounded-lg mb-4 text-sm font-mono text-emerald-300 border border-slate-700" id="statusText">
+                    Checking status...
+                </div>
+
+                <button id="trainBtn" class="w-full bg-purple-600 hover:bg-purple-500 py-3 rounded-xl font-bold transition-all shadow-lg shadow-purple-500/30 flex justify-center items-center gap-2">
+                    Start Custom Training
+                </button>
+            </div>
+
+            <div class="glass-panel p-6 rounded-2xl shadow-xl">
+                <h3 class="text-xl font-bold mb-4 text-amber-400">Dataset Statistics</h3>
+                <ul id="statsList" class="space-y-2 text-sm text-slate-300 divide-y divide-slate-700/50">
+                    <li class="py-2 text-slate-500">Loading data...</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Handle Image Upload
+        document.getElementById('uploadForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const file = document.getElementById('imageInput').files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            document.getElementById('uploadResult').innerText = "Uploading and processing...";
+
+            const res = await fetch('/upload_image', { method: 'POST', body: formData });
+            const data = await res.json();
+            document.getElementById('uploadResult').innerText = data.message;
+        };
+
+        // Handle Training Trigger
+        document.getElementById('trainBtn').onclick = async () => {
+            const res = await fetch('/start_training', { method: 'POST' });
+            const data = await res.json();
+            alert(data.status);
+            updateStatus();
+        };
+
+        // Poll Server for Status
+        async function updateStatus() {
+            try {
+                const res = await fetch('/training_status');
+                const data = await res.json();
+                
+                document.getElementById('statusText').innerText = data.status;
+                
+                if(data.is_training) {
+                    document.getElementById('trainBtn').disabled = true;
+                    document.getElementById('trainBtn').classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    document.getElementById('trainBtn').disabled = false;
+                    document.getElementById('trainBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+
+                // Update Stats
+                const statsList = document.getElementById('statsList');
+                statsList.innerHTML = '';
+                if(Object.keys(data.stats).length === 0) {
+                    statsList.innerHTML = '<li class="py-2 text-slate-500">No images collected yet.</li>';
+                } else {
+                    for (const [animal, count] of Object.entries(data.stats)) {
+                        statsList.innerHTML += `<li class="py-3 flex justify-between items-center"><span class="capitalize">${animal}</span> <span class="bg-slate-700 px-2 py-1 rounded text-xs">${count} images</span></li>`;
+                    }
+                }
+            } catch (err) {
+                console.error("Status check failed", err);
+            }
+        }
+
+        setInterval(updateStatus, 3000);
+        updateStatus();
+    </script>
+</body>
+</html>
