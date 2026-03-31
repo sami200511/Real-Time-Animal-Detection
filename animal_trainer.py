@@ -156,14 +156,17 @@ def run_detection_on_frame(model, frame_bgr, conf=0.25):
         out.append({"label": label_name, "box": (x1, y1, x2, y2), "score": score, "crop_pil": crop_pil, "crop_bgr": crop})
     return out
 
-def process_and_save(detections, frame_bgr):
+def process_and_save(detections, frame_bgr, override_label=None):
     if not detections: return
-    label = detections[0]["label"]
+    # Use the overridden label (from folder upload) or the detected label
+    label = override_label if override_label else detections[0]["label"]
+    
     if is_similar_image(detections[0]["crop_pil"], label): return
 
-    img_path = save_multiple_detections(frame_bgr, detections, label, int(time.time()))
+    img_path = save_multiple_detections(frame_bgr, detections, label, int(time.time() * 1000) % 10000)
     if img_path:
         for det in detections: add_hash_for_image(det["crop_pil"], label)
+    return True
 
 # --------------------------
 # Training Logic
@@ -196,7 +199,7 @@ def train_background_task():
         if runs_dir.exists():
             dest = WEIGHTS_PATH / f"{name}_best.pt"
             dest.write_bytes(runs_dir.read_bytes())
-            global_model = YOLO(str(dest)) # Load immediately
+            global_model = YOLO(str(dest)) 
             training_status = f"Training finished! Model updated to {name}_best.pt"
         else:
             training_status = "Training failed. best.pt not found."
@@ -244,6 +247,35 @@ def upload_image():
     results = run_detection_on_frame(global_model, frame)
     process_and_save(results, frame)
     return jsonify({"message": f"Processed image. Found {len(results)} animals."})
+
+@app.route('/upload_folder', methods=['POST'])
+def upload_folder():
+    files = request.files.getlist('files')
+    animal_name = request.form.get('animal_name')
+    
+    if not files or not animal_name:
+        return jsonify({"error": "Missing files or animal name"}), 400
+
+    # Add new animal to tracking if it doesn't exist
+    if animal_name not in ANIMALS:
+        ANIMALS.append(animal_name)
+        with open(new_animals_file, "a") as f:
+            f.write(animal_name + "\n")
+
+    saved_count = 0
+    for file in files:
+        npimg = np.frombuffer(file.read(), np.uint8)
+        frame = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+        if frame is None: continue
+        
+        results = run_detection_on_frame(global_model, frame)
+        if results:
+            # Force save under the uploaded folder's name
+            was_saved = process_and_save(results, frame, override_label=animal_name)
+            if was_saved:
+                saved_count += 1
+
+    return jsonify({"message": f"Folder processed. Extracted valid training crops from {saved_count} images."})
 
 @app.route('/start_training', methods=['POST'])
 def start_training():

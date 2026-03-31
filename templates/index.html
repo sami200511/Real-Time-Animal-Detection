@@ -15,23 +15,42 @@
     <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
         
         <div class="md:col-span-2 space-y-6">
+            
             <div class="glass-panel p-6 rounded-2xl shadow-xl">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-2xl font-bold text-emerald-400">Live Camera Feed</h2>
-                    <span class="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-full text-sm animate-pulse">Live Tracking</span>
+                    
+                    <div class="flex gap-2">
+                        <button id="startCamBtn" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg font-bold transition-all shadow-lg">▶ Open Camera</button>
+                        <button id="stopCamBtn" class="bg-red-600 hover:bg-red-500 px-4 py-2 rounded-lg font-bold transition-all shadow-lg hidden">⏹ Stop Camera</button>
+                    </div>
                 </div>
+
                 <div class="rounded-xl overflow-hidden border-2 border-slate-700 bg-black aspect-video flex justify-center items-center relative">
-                    <img src="{{ url_for('video_feed') }}" alt="Live Feed" class="w-full h-full object-cover">
+                    <div id="camPlaceholder" class="text-slate-500 absolute z-0">Camera is off</div>
+                    <img id="videoFeed" src="" alt="Live Feed" class="w-full h-full object-cover relative z-10 hidden">
                 </div>
             </div>
 
-            <div class="glass-panel p-6 rounded-2xl shadow-xl">
-                <h3 class="text-xl font-bold mb-4 text-blue-400">Process Static Image</h3>
-                <form id="uploadForm" class="flex gap-4 items-center">
-                    <input type="file" id="imageInput" accept="image/*" class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600 cursor-pointer">
-                    <button type="submit" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-full font-bold transition-all shadow-lg shadow-blue-500/30">Process</button>
-                </form>
-                <p id="uploadResult" class="mt-3 text-sm text-slate-400"></p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div class="glass-panel p-6 rounded-2xl shadow-xl">
+                    <h3 class="text-xl font-bold mb-4 text-blue-400">Process Single Image</h3>
+                    <form id="uploadForm" class="flex flex-col gap-4">
+                        <input type="file" id="imageInput" accept="image/*" class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-500 file:text-white hover:file:bg-blue-600 cursor-pointer">
+                        <button type="submit" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-full font-bold transition-all shadow-lg shadow-blue-500/30">Process Image</button>
+                    </form>
+                    <p id="uploadResult" class="mt-3 text-sm text-slate-400"></p>
+                </div>
+
+                <div class="glass-panel p-6 rounded-2xl shadow-xl">
+                    <h3 class="text-xl font-bold mb-4 text-orange-400">Process Folder</h3>
+                    <p class="text-xs text-slate-400 mb-4">Select a folder named after the animal (e.g., a folder named "deer").</p>
+                    <form id="folderForm" class="flex flex-col gap-4">
+                        <input type="file" id="folderInput" webkitdirectory directory multiple class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-500 file:text-white hover:file:bg-orange-600 cursor-pointer">
+                        <button type="submit" class="bg-orange-600 hover:bg-orange-500 px-6 py-2 rounded-full font-bold transition-all shadow-lg shadow-orange-500/30">Process Folder</button>
+                    </form>
+                    <p id="folderResult" class="mt-3 text-sm text-slate-400"></p>
+                </div>
             </div>
         </div>
 
@@ -60,7 +79,26 @@
     </div>
 
     <script>
-        // Handle Image Upload
+        // Camera Controls
+        const videoFeed = document.getElementById('videoFeed');
+        const startCamBtn = document.getElementById('startCamBtn');
+        const stopCamBtn = document.getElementById('stopCamBtn');
+
+        startCamBtn.onclick = () => {
+            videoFeed.src = "{{ url_for('video_feed') }}";
+            videoFeed.classList.remove('hidden');
+            startCamBtn.classList.add('hidden');
+            stopCamBtn.classList.remove('hidden');
+        };
+
+        stopCamBtn.onclick = () => {
+            videoFeed.src = ""; // Stops the browser from requesting the stream
+            videoFeed.classList.add('hidden');
+            startCamBtn.classList.remove('hidden');
+            stopCamBtn.classList.add('hidden');
+        };
+
+        // Handle Single Image Upload
         document.getElementById('uploadForm').onsubmit = async (e) => {
             e.preventDefault();
             const file = document.getElementById('imageInput').files[0];
@@ -73,6 +111,28 @@
             const res = await fetch('/upload_image', { method: 'POST', body: formData });
             const data = await res.json();
             document.getElementById('uploadResult').innerText = data.message;
+        };
+
+        // Handle Folder Upload
+        document.getElementById('folderForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const files = document.getElementById('folderInput').files;
+            if (files.length === 0) return;
+
+            // Automatically get the folder name from the path of the first file
+            const folderName = files[0].webkitRelativePath.split('/')[0];
+
+            const formData = new FormData();
+            formData.append('animal_name', folderName);
+            for(let i=0; i<files.length; i++){
+                formData.append('files', files[i]);
+            }
+
+            document.getElementById('folderResult').innerText = `Processing ${files.length} files from folder '${folderName}'... Please wait.`;
+
+            const res = await fetch('/upload_folder', { method: 'POST', body: formData });
+            const data = await res.json();
+            document.getElementById('folderResult').innerText = data.message;
         };
 
         // Handle Training Trigger
