@@ -2,6 +2,7 @@ import os
 import json
 import threading
 import time
+import shutil # مسؤولة عن حذف المجلدات
 from pathlib import Path
 from flask import Flask, render_template, Response, request, jsonify
 
@@ -158,7 +159,6 @@ def run_detection_on_frame(model, frame_bgr, conf=0.25):
 
 def process_and_save(detections, frame_bgr, override_label=None):
     if not detections: return
-    # Use the overridden label (from folder upload) or the detected label
     label = override_label if override_label else detections[0]["label"]
     
     if is_similar_image(detections[0]["crop_pil"], label): return
@@ -256,7 +256,6 @@ def upload_folder():
     if not files or not animal_name:
         return jsonify({"error": "Missing files or animal name"}), 400
 
-    # Add new animal to tracking if it doesn't exist
     if animal_name not in ANIMALS:
         ANIMALS.append(animal_name)
         with open(new_animals_file, "a") as f:
@@ -270,12 +269,31 @@ def upload_folder():
         
         results = run_detection_on_frame(global_model, frame)
         if results:
-            # Force save under the uploaded folder's name
             was_saved = process_and_save(results, frame, override_label=animal_name)
             if was_saved:
                 saved_count += 1
 
     return jsonify({"message": f"Folder processed. Extracted valid training crops from {saved_count} images."})
+
+@app.route('/delete_animal', methods=['POST'])
+def delete_animal():
+    data = request.json
+    animal = data.get('animal')
+    if not animal:
+        return jsonify({"error": "No animal specified"}), 400
+
+    # حذف المجلد من ملفات التدريب
+    animal_dir = TRAIN_DIR / animal
+    if animal_dir.exists():
+        shutil.rmtree(animal_dir)
+
+    # حذفه من قاعدة بيانات التكرار (Hash DB)
+    db = load_hash_db()
+    if animal in db:
+        del db[animal]
+        save_hash_db(db)
+
+    return jsonify({"message": f"تم حذف جميع بيانات '{animal}' بنجاح."})
 
 @app.route('/start_training', methods=['POST'])
 def start_training():

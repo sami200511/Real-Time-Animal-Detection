@@ -8,9 +8,26 @@
     <style>
         body { background-color: #0f172a; color: #f8fafc; }
         .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid #334155; }
+        /* أنميشن الساعة الرملية */
+        @keyframes flipHourglass {
+            0% { transform: rotate(0deg); }
+            50% { transform: rotate(180deg); }
+            100% { transform: rotate(180deg); }
+        }
+        .animate-hourglass {
+            animation: flipHourglass 2s infinite ease-in-out;
+        }
     </style>
 </head>
-<body class="min-h-screen p-6 font-sans">
+<body class="min-h-screen p-6 font-sans relative">
+
+    <div id="loadingOverlay" class="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-50 hidden flex flex-col justify-center items-center">
+        <svg class="animate-hourglass h-20 w-20 text-emerald-500 mb-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4h16v4l-6 6v4l6 6v4H4v-4l6-6v-4l-6-6V4z" />
+        </svg>
+        <h2 class="text-2xl font-bold text-emerald-400 animate-pulse">Processing... Please Wait</h2>
+        <p class="text-slate-400 mt-3 text-sm">جاري المعالجة، الرجاء عدم إغلاق الصفحة أو تحديثها...</p>
+    </div>
 
     <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
         
@@ -44,7 +61,7 @@
 
                 <div class="glass-panel p-6 rounded-2xl shadow-xl">
                     <h3 class="text-xl font-bold mb-4 text-orange-400">Process Folder</h3>
-                    <p class="text-xs text-slate-400 mb-4">Select a folder named after the animal (e.g., a folder named "deer").</p>
+                    <p class="text-xs text-slate-400 mb-4">Select a folder named after the animal.</p>
                     <form id="folderForm" class="flex flex-col gap-4">
                         <input type="file" id="folderInput" webkitdirectory directory multiple class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-orange-500 file:text-white hover:file:bg-orange-600 cursor-pointer">
                         <button type="submit" class="bg-orange-600 hover:bg-orange-500 px-6 py-2 rounded-full font-bold transition-all shadow-lg shadow-orange-500/30">Process Folder</button>
@@ -64,7 +81,7 @@
                     Checking status...
                 </div>
 
-                <button id="trainBtn" class="w-full bg-purple-600 hover:bg-purple-500 py-3 rounded-xl font-bold transition-all shadow-lg shadow-purple-500/30 flex justify-center items-center gap-2">
+                <button id="trainBtn" onclick="triggerTraining()" class="w-full bg-purple-600 hover:bg-purple-500 py-3 rounded-xl font-bold transition-all shadow-lg shadow-purple-500/30 flex justify-center items-center gap-2">
                     Start Custom Training
                 </button>
             </div>
@@ -79,6 +96,10 @@
     </div>
 
     <script>
+        // دوال شاشة التحميل
+        function showLoading() { document.getElementById('loadingOverlay').classList.remove('hidden'); }
+        function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
+
         // Camera Controls
         const videoFeed = document.getElementById('videoFeed');
         const startCamBtn = document.getElementById('startCamBtn');
@@ -92,7 +113,7 @@
         };
 
         stopCamBtn.onclick = () => {
-            videoFeed.src = ""; // Stops the browser from requesting the stream
+            videoFeed.src = ""; 
             videoFeed.classList.add('hidden');
             startCamBtn.classList.remove('hidden');
             stopCamBtn.classList.add('hidden');
@@ -106,11 +127,15 @@
 
             const formData = new FormData();
             formData.append('file', file);
-            document.getElementById('uploadResult').innerText = "Uploading and processing...";
-
-            const res = await fetch('/upload_image', { method: 'POST', body: formData });
-            const data = await res.json();
-            document.getElementById('uploadResult').innerText = data.message;
+            
+            showLoading(); // تشغيل شاشة التحميل
+            try {
+                const res = await fetch('/upload_image', { method: 'POST', body: formData });
+                const data = await res.json();
+                document.getElementById('uploadResult').innerText = data.message;
+            } finally {
+                hideLoading(); // إخفاء الشاشة دائماً
+            }
         };
 
         // Handle Folder Upload
@@ -119,7 +144,6 @@
             const files = document.getElementById('folderInput').files;
             if (files.length === 0) return;
 
-            // Automatically get the folder name from the path of the first file
             const folderName = files[0].webkitRelativePath.split('/')[0];
 
             const formData = new FormData();
@@ -128,20 +152,53 @@
                 formData.append('files', files[i]);
             }
 
-            document.getElementById('folderResult').innerText = `Processing ${files.length} files from folder '${folderName}'... Please wait.`;
+            showLoading(); // تشغيل شاشة التحميل والمقاطعة
+            
+            try {
+                const res = await fetch('/upload_folder', { method: 'POST', body: formData });
+                const data = await res.json();
+                document.getElementById('folderResult').innerText = data.message;
+                
+                // سؤال المستخدم إذا كان يريد التدريب الآن
+                setTimeout(() => {
+                    if(confirm(`تمت معالجة المجلد (${folderName}) بنجاح.\n\nهل تريد البدء بتدريب الموديل الآن على هذه البيانات الجديدة؟`)) {
+                        triggerTraining();
+                    }
+                }, 500);
 
-            const res = await fetch('/upload_folder', { method: 'POST', body: formData });
-            const data = await res.json();
-            document.getElementById('folderResult').innerText = data.message;
+            } catch(err) {
+                alert("حدث خطأ أثناء رفع المجلد.");
+            } finally {
+                hideLoading(); // إغلاق الشاشة
+            }
         };
 
-        // Handle Training Trigger
-        document.getElementById('trainBtn').onclick = async () => {
+        // دالة تفعيل التدريب
+        async function triggerTraining() {
             const res = await fetch('/start_training', { method: 'POST' });
             const data = await res.json();
             alert(data.status);
             updateStatus();
-        };
+        }
+
+        // دالة حذف البيانات
+        async function deleteAnimal(animal) {
+            if(!confirm(`تحذير: هل أنت متأكد أنك تريد حذف جميع صور وبيانات تدريب الحيوان: ${animal}؟\nلا يمكن التراجع عن هذا الإجراء.`)) return;
+            
+            showLoading();
+            try {
+                const res = await fetch('/delete_animal', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ animal: animal })
+                });
+                const data = await res.json();
+                alert(data.message);
+                updateStatus();
+            } finally {
+                hideLoading();
+            }
+        }
 
         // Poll Server for Status
         async function updateStatus() {
@@ -151,22 +208,30 @@
                 
                 document.getElementById('statusText').innerText = data.status;
                 
+                const trainBtn = document.getElementById('trainBtn');
                 if(data.is_training) {
-                    document.getElementById('trainBtn').disabled = true;
-                    document.getElementById('trainBtn').classList.add('opacity-50', 'cursor-not-allowed');
+                    trainBtn.disabled = true;
+                    trainBtn.classList.add('opacity-50', 'cursor-not-allowed');
                 } else {
-                    document.getElementById('trainBtn').disabled = false;
-                    document.getElementById('trainBtn').classList.remove('opacity-50', 'cursor-not-allowed');
+                    trainBtn.disabled = false;
+                    trainBtn.classList.remove('opacity-50', 'cursor-not-allowed');
                 }
 
-                // Update Stats
+                // Update Stats with Delete Button
                 const statsList = document.getElementById('statsList');
                 statsList.innerHTML = '';
                 if(Object.keys(data.stats).length === 0) {
-                    statsList.innerHTML = '<li class="py-2 text-slate-500">No images collected yet.</li>';
+                    statsList.innerHTML = '<li class="py-2 text-slate-500">لا يوجد بيانات حتى الآن.</li>';
                 } else {
                     for (const [animal, count] of Object.entries(data.stats)) {
-                        statsList.innerHTML += `<li class="py-3 flex justify-between items-center"><span class="capitalize">${animal}</span> <span class="bg-slate-700 px-2 py-1 rounded text-xs">${count} images</span></li>`;
+                        statsList.innerHTML += `
+                            <li class="py-3 flex justify-between items-center group">
+                                <span class="capitalize font-semibold">${animal}</span> 
+                                <div class="flex items-center gap-2">
+                                    <span class="bg-slate-700 text-slate-200 px-2 py-1 rounded text-xs">${count} images</span>
+                                    <button onclick="deleteAnimal('${animal}')" class="text-red-500 hover:text-white hover:bg-red-500 px-2 py-1 rounded transition-colors" title="Delete Data">✕</button>
+                                </div>
+                            </li>`;
                     }
                 }
             } catch (err) {
