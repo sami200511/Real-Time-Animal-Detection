@@ -2,7 +2,8 @@ import os
 import json
 import threading
 import time
-import shutil # Responsible for deleting folders
+import shutil
+import base64
 from pathlib import Path
 from flask import Flask, render_template, Response, request, jsonify
 
@@ -24,6 +25,7 @@ PROJECT_DIR = Path.cwd() / "project_data"
 TRAIN_DIR = PROJECT_DIR / "train"
 HASH_DB = PROJECT_DIR / "hash_db.json"
 WEIGHTS_PATH = PROJECT_DIR / "weights"
+UPLOAD_FOLDER = PROJECT_DIR / "uploads"
 INITIAL_WEIGHTS = "yolov8n.pt"
 
 HASH_SIZE = 64
@@ -46,6 +48,7 @@ if new_animals_file.exists():
 
 os.makedirs(TRAIN_DIR, exist_ok=True)
 os.makedirs(WEIGHTS_PATH, exist_ok=True)
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 if not HASH_DB.exists():
     with open(HASH_DB, "w") as f:
         json.dump({}, f)
@@ -54,6 +57,7 @@ if not HASH_DB.exists():
 global_model = None
 is_training = False
 training_status = "Ready"
+current_video_path = None
 
 def init_model():
     global global_model
@@ -237,6 +241,44 @@ def generate_frames():
 def video_feed():
     return Response(generate_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
 
+def generate_video_playback_frames():
+    global current_video_path
+    if not current_video_path or not os.path.exists(current_video_path): return
+    
+    cap = cv2.VideoCapture(current_video_path)
+    while cap.isOpened():
+        success, frame = cap.read()
+        if not success: break
+        
+        results = run_detection_on_frame(global_model, frame)
+        for det in results:
+            x1, y1, x2, y2 = det['box']
+            cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+            cv2.putText(frame, f"{det['label']} {det['score']:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+        
+        if results: process_and_save(results, frame)
+
+        ret, buffer = cv2.imencode('.jpg', frame)
+        frame_bytes = buffer.tobytes()
+        yield (b'--frame\r\n' b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
+    cap.release()
+
+@app.route('/video_playback_feed')
+def video_playback_feed():
+    return Response(generate_video_playback_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+@app.route('/upload_video', methods=['POST'])
+def upload_video():
+    global current_video_path
+    if 'file' not in request.files: return jsonify({"error": "No file"}), 400
+    file = request.files['file']
+    
+    video_path = UPLOAD_FOLDER / "temp_video.mp4"
+    file.save(str(video_path))
+    current_video_path = str(video_path)
+    
+    return jsonify({"message": "The video has been uploaded and processing has started."})
+
 @app.route('/upload_image', methods=['POST'])
 def upload_image():
     if 'file' not in request.files: return jsonify({"error": "No file"}), 400
@@ -245,8 +287,20 @@ def upload_image():
     frame = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
     
     results = run_detection_on_frame(global_model, frame)
+    
+    # Draw the boxes on the image
+    for det in results:
+        x1, y1, x2, y2 = det['box']
+        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        cv2.putText(frame, f"{det['label']} {det['score']:.2f}", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+    
     process_and_save(results, frame)
-    return jsonify({"message": f"Processed image. Found {len(results)} animals."})
+
+    # Convert the image to Base64 text to send it to the browser
+    _, buffer = cv2.imencode('.jpg', frame)
+    img_base64 = base64.b64encode(buffer).decode('utf-8')
+
+    return jsonify({"message": f"The image has been processed. {len(results)} animals were found.", "image": img_base64})
 
 @app.route('/upload_folder', methods=['POST'])
 def upload_folder():
@@ -282,18 +336,16 @@ def delete_animal():
     if not animal:
         return jsonify({"error": "No animal specified"}), 400
 
-    # حذف المجلد من ملفات التدريب
     animal_dir = TRAIN_DIR / animal
     if animal_dir.exists():
         shutil.rmtree(animal_dir)
 
-    # حذفه من قاعدة بيانات التكرار (Hash DB)
     db = load_hash_db()
     if animal in db:
         del db[animal]
         save_hash_db(db)
 
-    return jsonify({"message": f"تم حذف جميع بيانات '{animal}' بنجاح."})
+    return jsonify({"message": f"All data for '{animal}' has been successfully deleted."})
 
 @app.route('/start_training', methods=['POST'])
 def start_training():

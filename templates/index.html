@@ -8,7 +8,6 @@
     <style>
         body { background-color: #0f172a; color: #f8fafc; }
         .glass-panel { background: rgba(30, 41, 59, 0.7); backdrop-filter: blur(10px); border: 1px solid #334155; }
-        /* Hourglass Animation */
         @keyframes flipHourglass {
             0% { transform: rotate(0deg); }
             50% { transform: rotate(180deg); }
@@ -26,7 +25,7 @@
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4h16v4l-6 6v4l6 6v4H4v-4l6-6v-4l-6-6V4z" />
         </svg>
         <h2 class="text-2xl font-bold text-emerald-400 animate-pulse">Processing... Please Wait</h2>
-        <p class="text-slate-400 mt-3 text-sm">Processing in progress, please do not close or refresh the page...</p>
+        <p class="text-slate-400 mt-3 text-sm">Processing... Please do not close the page.</p>
     </div>
 
     <div class="max-w-7xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -36,16 +35,14 @@
             <div class="glass-panel p-6 rounded-2xl shadow-xl">
                 <div class="flex justify-between items-center mb-4">
                     <h2 class="text-2xl font-bold text-emerald-400">Live Camera Feed</h2>
-                    
                     <div class="flex gap-2">
                         <button id="startCamBtn" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-lg font-bold transition-all shadow-lg">▶ Open Camera</button>
                         <button id="stopCamBtn" class="bg-red-600 hover:bg-red-500 px-4 py-2 rounded-lg font-bold transition-all shadow-lg hidden">⏹ Stop Camera</button>
                     </div>
                 </div>
-
                 <div class="rounded-xl overflow-hidden border-2 border-slate-700 bg-black aspect-video flex justify-center items-center relative">
-                    <div id="camPlaceholder" class="text-slate-500 absolute z-0">Camera is off</div>
-                    <img id="videoFeed" src="" alt="Live Feed" class="w-full h-full object-cover relative z-10 hidden">
+                    <div class="text-slate-500 absolute z-0">Camera is off</div>
+                    <img id="videoFeed" src="" class="w-full h-full object-cover relative z-10 hidden">
                 </div>
             </div>
 
@@ -57,6 +54,10 @@
                         <button type="submit" class="bg-blue-600 hover:bg-blue-500 px-6 py-2 rounded-full font-bold transition-all shadow-lg shadow-blue-500/30">Process Image</button>
                     </form>
                     <p id="uploadResult" class="mt-3 text-sm text-slate-400"></p>
+                    
+                    <div class="mt-4">
+                        <img id="resultImage" src="" class="hidden rounded-xl border-2 border-slate-600 w-full shadow-lg">
+                    </div>
                 </div>
 
                 <div class="glass-panel p-6 rounded-2xl shadow-xl">
@@ -69,18 +70,30 @@
                     <p id="folderResult" class="mt-3 text-sm text-slate-400"></p>
                 </div>
             </div>
+
+            <div class="glass-panel p-6 rounded-2xl shadow-xl">
+                <h3 class="text-xl font-bold mb-4 text-pink-400">Process Video</h3>
+                <form id="videoForm" class="flex flex-col gap-4">
+                    <input type="file" id="videoInput" accept="video/*" class="block w-full text-sm text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-pink-500 file:text-white hover:file:bg-pink-600 cursor-pointer">
+                    <button type="submit" class="bg-pink-600 hover:bg-pink-500 px-6 py-2 rounded-full font-bold transition-all shadow-lg shadow-pink-500/30">Upload & Process Video</button>
+                </form>
+                <p id="videoResult" class="mt-3 text-sm text-slate-400"></p>
+
+                <div id="videoStreamContainer" class="mt-4 rounded-xl overflow-hidden border-2 border-slate-700 bg-black aspect-video flex justify-center items-center relative hidden">
+                    <img id="uploadedVideoFeed" src="" alt="Processed Video Stream" class="w-full h-full object-cover relative z-10">
+                </div>
+            </div>
+
         </div>
 
         <div class="space-y-6">
             
             <div class="glass-panel p-6 rounded-2xl shadow-xl">
                 <h3 class="text-xl font-bold mb-4 text-purple-400">Model Auto-Trainer</h3>
-                <p class="text-sm text-slate-400 mb-4">The system collects distinct crops automatically. Train the model when you have enough data.</p>
-                
+                <p class="text-sm text-slate-400 mb-4">The system collects distinct crops automatically.</p>
                 <div class="p-4 bg-slate-800 rounded-lg mb-4 text-sm font-mono text-emerald-300 border border-slate-700" id="statusText">
                     Checking status...
                 </div>
-
                 <button id="trainBtn" onclick="triggerTraining()" class="w-full bg-purple-600 hover:bg-purple-500 py-3 rounded-xl font-bold transition-all shadow-lg shadow-purple-500/30 flex justify-center items-center gap-2">
                     Start Custom Training
                 </button>
@@ -96,7 +109,6 @@
     </div>
 
     <script>
-        // Loading screen functions
         function showLoading() { document.getElementById('loadingOverlay').classList.remove('hidden'); }
         function hideLoading() { document.getElementById('loadingOverlay').classList.add('hidden'); }
 
@@ -119,7 +131,7 @@
             stopCamBtn.classList.add('hidden');
         };
 
-        // Handle Single Image Upload
+        // Handle Image Upload
         document.getElementById('uploadForm').onsubmit = async (e) => {
             e.preventDefault();
             const file = document.getElementById('imageInput').files[0];
@@ -128,13 +140,43 @@
             const formData = new FormData();
             formData.append('file', file);
             
-            showLoading(); // Turn on loading screen
+            showLoading(); 
             try {
                 const res = await fetch('/upload_image', { method: 'POST', body: formData });
                 const data = await res.json();
                 document.getElementById('uploadResult').innerText = data.message;
+                
+                // Display the image with green boxes
+                const resultImage = document.getElementById('resultImage');
+                resultImage.src = "data:image/jpeg;base64," + data.image;
+                resultImage.classList.remove('hidden');
             } finally {
-                hideLoading(); // Hide screen always
+                hideLoading(); 
+            }
+        };
+
+        // Handle Video Upload
+        document.getElementById('videoForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const file = document.getElementById('videoInput').files[0];
+            if (!file) return;
+
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            showLoading();
+            try {
+                const res = await fetch('/upload_video', { method: 'POST', body: formData });
+                const data = await res.json();
+                document.getElementById('videoResult').innerText = data.message;
+                
+                // Show and start streaming the processed video
+                document.getElementById('videoStreamContainer').classList.remove('hidden');
+                document.getElementById('uploadedVideoFeed').src = "/video_playback_feed?t=" + new Date().getTime();
+            } catch(err) {
+                alert("Error processing video.");
+            } finally {
+                hideLoading();
             }
         };
 
@@ -145,23 +187,19 @@
             if (files.length === 0) return;
 
             const folderName = files[0].webkitRelativePath.split('/')[0];
-
             const formData = new FormData();
             formData.append('animal_name', folderName);
-            for(let i=0; i<files.length; i++){
-                formData.append('files', files[i]);
-            }
+            for(let i=0; i<files.length; i++){ formData.append('files', files[i]); }
 
-            showLoading(); // Turn on loading screen
+            showLoading(); 
             
             try {
                 const res = await fetch('/upload_folder', { method: 'POST', body: formData });
                 const data = await res.json();
                 document.getElementById('folderResult').innerText = data.message;
                 
-                // Ask user if they want to train now
                 setTimeout(() => {
-                    if(confirm(`Folder (${folderName}) processed successfully.\n\nDo you want to start training the model now on this new data?`)) {
+                    if(confirm(`The folder (${folderName}) has been processed successfully.\n\nDo you want to start training the model now on this new data?`)) {
                         triggerTraining();
                     }
                 }, 500);
@@ -169,11 +207,11 @@
             } catch(err) {
                 alert("An error occurred while uploading the folder.");
             } finally {
-                hideLoading(); // Close screen
+                hideLoading(); 
             }
         };
 
-        // Training trigger function
+        // Training and Deletion
         async function triggerTraining() {
             const res = await fetch('/start_training', { method: 'POST' });
             const data = await res.json();
@@ -181,10 +219,8 @@
             updateStatus();
         }
 
-        // Delete data function
         async function deleteAnimal(animal) {
-            if(!confirm(`Warning: Are you sure you want to delete all images and training data for the animal: ${animal}?\nThis action cannot be undone.`)) return;
-            
+            if(!confirm(`Are you sure you want to delete the data: ${animal}?`)) return;
             showLoading();
             try {
                 const res = await fetch('/delete_animal', {
@@ -200,14 +236,13 @@
             }
         }
 
-        // Poll Server for Status
+        // Status Polling
         async function updateStatus() {
             try {
                 const res = await fetch('/training_status');
                 const data = await res.json();
                 
                 document.getElementById('statusText').innerText = data.status;
-                
                 const trainBtn = document.getElementById('trainBtn');
                 if(data.is_training) {
                     trainBtn.disabled = true;
@@ -217,11 +252,10 @@
                     trainBtn.classList.remove('opacity-50', 'cursor-not-allowed');
                 }
 
-                // Update Stats with Delete Button
                 const statsList = document.getElementById('statsList');
                 statsList.innerHTML = '';
                 if(Object.keys(data.stats).length === 0) {
-                    statsList.innerHTML = '<li class="py-2 text-slate-500">No data available yet.</li>';
+                    statsList.innerHTML = '<li class="py-2 text-slate-500">No data yet.</li>';
                 } else {
                     for (const [animal, count] of Object.entries(data.stats)) {
                         statsList.innerHTML += `
@@ -234,9 +268,7 @@
                             </li>`;
                     }
                 }
-            } catch (err) {
-                console.error("Status check failed", err);
-            }
+            } catch (err) { console.error("Status check failed", err); }
         }
 
         setInterval(updateStatus, 3000);
