@@ -232,7 +232,18 @@ def train_background_task():
             dest.write_bytes(best_pt.read_bytes())
             current_weights_path = str(dest)
             global_model = YOLO(current_weights_path) 
-            training_status = f"Training Finished!"
+            
+            training_status = "Cleaning up training data..."
+            
+            for lbl_dir in TRAIN_DIR.iterdir():
+                if lbl_dir.is_dir():
+                    shutil.rmtree(lbl_dir, ignore_errors=True)
+            
+            with open(HASH_DB, "w") as f:
+                json.dump({}, f)
+                
+            training_status = "Training Finished & Data Cleared!"
+
         else:
             training_status = "Training failed. best.pt not found."
     except Exception as e:
